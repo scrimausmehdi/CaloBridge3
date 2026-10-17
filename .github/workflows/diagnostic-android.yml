@@ -1,0 +1,93 @@
+name: Diagnostic environnement Android CaloBridge3
+
+on:
+  push:
+    paths:
+      - '.github/workflows/diagnostic-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verifier-android:
+    name: Java + SDK Android + Gradle + dependances
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+
+      - name: Installer Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Preparer le SDK Android API 36
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+
+      - name: Preparer Gradle 8.14.5
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.5'
+
+      - name: Verifier les outils installes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android-env-report
+          {
+            echo 'CaloBridge3 - rapport environnement Android'
+            echo 'Java attendu : 17'
+            echo 'Gradle attendu : 8.14.5'
+            echo 'SDK attendu : Android API 36'
+            echo 'Build Tools attendus : 36.0.0'
+            echo 'Plugin Android cible : 8.13.2'
+            echo 'Plugin Kotlin cible : 2.2.21'
+          } > android-env-report/rapport.txt
+          java -version 2>&1 | tee android-env-report/java.txt
+          gradle --version | tee android-env-report/gradle.txt
+          sdkmanager --list_installed | tee android-env-report/android-sdk.txt
+          SDK_DIR="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$SDK_DIR"
+          test -f "$SDK_DIR/platforms/android-36/android.jar"
+          test -x "$SDK_DIR/build-tools/36.0.0/aapt2"
+          echo 'Java, Gradle, Android SDK et Build Tools disponibles.' | tee -a android-env-report/rapport.txt
+
+      - name: Verifier la resolution des plugins Android et Kotlin (sans APK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/calobridge3-test-plugins" android-env-report
+          cat > "$RUNNER_TEMP/calobridge3-test-plugins/settings.gradle.kts" <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          rootProject.name = "calobridge3-test-plugins"
+          EOF
+          cat > "$RUNNER_TEMP/calobridge3-test-plugins/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.13.2" apply false
+              id("org.jetbrains.kotlin.android") version "2.2.21" apply false
+          }
+          EOF
+          gradle -p "$RUNNER_TEMP/calobridge3-test-plugins" help --no-daemon --console=plain \
+            | tee android-env-report/verification-plugins.txt
+          echo 'Plugins Android et Kotlin resolus : aucun APK compile.' | tee -a android-env-report/rapport.txt
+
+      - name: Publier le rapport telechargeable
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-android-calobridge3
+          path: android-env-report/
+          if-no-files-found: warn
+          retention-days: 7
