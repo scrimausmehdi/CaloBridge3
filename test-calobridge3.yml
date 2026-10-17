@@ -1,0 +1,23 @@
+name: Test CaloBridge3
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Tester GitHub Actions
+        run: echo "CaloBridge3 fonctionne" > diagnostic.txt
+
+      - name: Produire un fichier telechargeable
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-calobridge3
+          path: diagnostic.txt
